@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    <title>Tournament Bracket - CAHAYA DIGITAL SCORING</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+    <!-- html2pdf untuk Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&display=swap');
+        
+        body { 
+            font-family: 'Montserrat', sans-serif; 
+            background-color: #f8fafc; 
+            color: #0f172a; 
+            margin: 0; 
+            height: 100vh; 
+            width: 100vw; 
+            overflow: hidden; 
+        }
+        
+        /* SCROLLBAR KUSTOM */
+        .custom-scroll { overflow: auto; }
+        .custom-scroll::-webkit-scrollbar { height: 12px; width: 12px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; border: 3px solid #f8fafc; }
+        .custom-scroll::-webkit-scrollbar-track { background: #f8fafc; }
+
+        /* --- TREE BRACKET SYSTEM --- */
+        .bracket-wrapper {
+            padding: 50px;
+            min-width: max-content;
+            display: inline-block;
+            background-color: #f8fafc;
+        }
+
+        .tree-node {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+        }
+
+        .tree-children {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            position: relative;
+            padding-right: 40px;
+        }
+
+        .tree-child-wrapper {
+            display: flex;
+            align-items: center;
+            position: relative;
+            padding: 10px 0;
+        }
+
+        /* Garis horizontal keluar dari child menuju parent */
+        .tree-child-wrapper::after {
+            content: ''; position: absolute; right: -40px; top: 50%; width: 40px; border-bottom: 3px solid #94a3b8; z-index: 1;
+        }
+
+        /* Garis Vertikal penghubung antar child */
+        .tree-child-wrapper:first-child::before {
+            content: ''; position: absolute; right: -40px; top: 50%; height: 50%; border-right: 3px solid #94a3b8; border-top-right-radius: 10px;
+        }
+        .tree-child-wrapper:last-child::before {
+            content: ''; position: absolute; right: -40px; bottom: 50%; height: 50%; border-right: 3px solid #94a3b8; border-bottom-right-radius: 10px;
+        }
+        .tree-child-wrapper:only-child::before {
+            display: none; 
+        }
+
+        .tree-parent {
+            position: relative;
+            margin-left: 40px;
+            width: 290px; /* Lebar Kartu */
+            flex-shrink: 0;
+        }
+
+        /* Garis horizontal masuk ke parent */
+        .tree-parent::before {
+            content: ''; position: absolute; left: -40px; top: 50%; width: 40px; border-bottom: 3px solid #94a3b8; z-index: 1;
+        }
+        
+        /* HILANGKAN GARIS JIKA NODE ADALAH UJUNG KIRI (LEAF/BABAK PERTAMA) */
+        .tree-parent.is-leaf::before { display: none; }
+        
+        /* Node paling ujung Kanan (Root/Final) */
+        .is-root > .tree-parent::before { display: none; }
+        .is-root > .tree-parent { margin-left: 0; }
+
+        /* --- DESAIN KARTU PERTANDINGAN --- */
+        .matchup-card {
+            width: 100%;
+            border-radius: 14px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            border: 3px solid #e2e8f0;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+            background: white;
+            z-index: 10;
+            position: relative;
+        }
+
+        .match-tag {
+            background: #1e293b;
+            color: white;
+            font-size: 0.65rem;
+            font-weight: 900;
+            text-transform: uppercase;
+            padding: 8px 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            letter-spacing: 1px;
+        }
+
+        .match-category-info {
+            background: #f1f5f9;
+            color: #475569;
+            font-size: 0.65rem;
+            font-weight: 800;
+            text-align: center;
+            padding: 5px;
+            border-bottom: 1px solid #e2e8f0;
+            text-transform: uppercase;
+        }
+
+        .player-slot {
+            padding: 12px 15px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            min-height: 65px;
+        }
+
+        .player-slot span { font-weight: 900; font-size: 0.85rem; line-height: 1.2; text-transform: uppercase; word-break: break-word; }
+        .player-slot small { font-size: 0.65rem; font-weight: 700; margin-top: 4px; text-transform: uppercase; word-break: break-word; }
+
+        .slot-blue { background-color: #2563eb; }
+        .slot-blue span { color: #ffffff; }
+        .slot-blue small { color: #bfdbfe; }
+        
+        .slot-red { background-color: #dc2626; }
+        .slot-red span { color: #ffffff; }
+        .slot-red small { color: #fecaca; }
+        
+        /* STATE GUGUR (Warna Abu-Abu dan Tercoret) */
+        .slot-gray { background-color: #e2e8f0 !important; }
+        .slot-gray span { color: #94a3b8 !important; text-decoration: line-through; opacity: 0.8; }
+        .slot-gray small { color: #cbd5e1 !important; text-decoration: line-through; opacity: 0.8; }
+
+        /* JUARA BOX */
+        .champ-box { background: #fef08a; border: 3px solid #eab308; display: flex; flex-direction: column; align-items: center; padding: 20px; border-radius: 14px; text-align: center; width: 290px; margin-left: 40px; position: relative;}
+        .champ-box::before {
+            content: ''; position: absolute; left: -40px; top: 50%; width: 40px; border-bottom: 3px solid #94a3b8;
+        }
+        
+        /* Header Khusus Export PDF */
+        .export-header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px dashed #cbd5e1;
+            display: none; /* Sembunyikan di layar, munculkan di JS saat export */
+        }
+    </style>
+</head>
+<body class="flex flex-col">
+
+    <!-- APP WRAPPER -->
+    <div class="w-full h-full flex flex-col bg-slate-50 overflow-hidden">
+        
+        <!-- HEADER CONTROL -->
+        <div class="p-4 bg-white shadow-sm flex flex-col md:flex-row md:justify-between md:items-center border-b border-slate-200 gap-4 z-20 relative shrink-0">
+            <div class="flex items-center gap-4">
+                <button onclick="window.history.back()" class="w-10 h-10 bg-slate-100 text-slate-500 rounded-xl hover:bg-slate-200 hover:text-slate-700 transition-all flex items-center justify-center active:scale-95 shadow-inner border border-slate-200">
+                    <i class="fas fa-arrow-left"></i>
+                </button>
+                <div>
+                    <h2 class="text-sm font-black uppercase italic text-amber-600 leading-tight">Tournament Bracket</h2>
+                    <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Greedy Pairing System</p>
+                </div>
+            </div>
+
+            <!-- FILTER & ACTIONS -->
+            <div class="flex flex-wrap gap-2 items-center">
+                
+                <select id="br-f-cat" onchange="generateNewBracket()" class="text-[10px] font-bold border rounded-xl px-3 py-2.5 uppercase bg-slate-50 border-slate-200 cursor-pointer shadow-sm">
+                    <option value="SEMUA">Semua Kategori</option>
+                </select>
+                
+                <select id="br-f-kelas" onchange="generateNewBracket()" class="text-[10px] font-bold border rounded-xl px-3 py-2.5 uppercase bg-slate-50 border-slate-200 cursor-pointer shadow-sm">
+                    <option value="SEMUA">Semua Kelas</option>
+                </select>
+                
+                <!-- Filter Gender Baru -->
+                <select id="br-f-gender" onchange="generateNewBracket()" class="text-[10px] font-bold border rounded-xl px-3 py-2.5 uppercase bg-slate-50 border-slate-200 cursor-pointer shadow-sm">
+                    <option value="SEMUA">Semua Gender</option>
+                </select>
+                
+                <button onclick="exportBracketPDF()" class="bg-amber-600 text-white font-black text-[10px] px-5 py-2.5 rounded-xl shadow-md hover:bg-amber-700 active:scale-95 transition-all flex items-center gap-2 border-b-4 border-amber-800">
+                    <i class="fas fa-file-pdf text-lg"></i> EXPORT PDF
+                </button>
+            </div>
+        </div>
+
+        <!-- CANVAS BAGAN (SCROLLABLE) -->
+        <div class="custom-scroll flex-1 relative" id="scroll-container">
+            <!-- bracket-render dijadikan target export PDF agar ukurannya menyesuaikan konten -->
+            <div id="bracket-render" class="bracket-wrapper">
+                <!-- Skema di render disini oleh JS -->
+            </div>
+        </div>
+        
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        const firebaseConfig = {
+  apiKey: "AIzaSyAVwQw-zBMEVbRaQc2lcWfdss3l2zOhoNs",
+  authDomain: "pscp-ternate.firebaseapp.com",
+  databaseURL: "https://pscp-ternate-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "pscp-ternate",
+  storageBucket: "pscp-ternate.firebasestorage.app",
+  messagingSenderId: "1057698178770",
+  appId: "1:1057698178770:web:d4ed0a01f84d26603c2f0b"
+};
+
+        const app = initializeApp(firebaseConfig);
+        const database = getDatabase(app);
+        const dbRef = ref(database, 'pencak_scoring_state');
+
+        window.state = { matches: [] };
+
+        // Listener Data
+        onValue(dbRef, (snapshot) => {
+            const data = snapshot.val();
+            if (data) { 
+                window.state = data; 
+                updateFilters();
+                generateNewBracket();
+            }
+        });
+
+        // Update Dropdown Filter Dinamis
+        function updateFilters() {
+            const activeMatches = (window.state.matches || []).filter(m => m.m || m.b);
+            
+            // Update Kelas
+            const uniqueKelas = [...new Set(activeMatches.map(m => m.kelas))].filter(Boolean).sort();
+            const selectKelas = document.getElementById('br-f-kelas');
+            const currentValK = selectKelas.value;
+            selectKelas.innerHTML = '<option value="SEMUA">Semua Kelas</option>' + uniqueKelas.map(k => `<option value="${k}">${k}</option>`).join('');
+            if(uniqueKelas.includes(currentValK)) selectKelas.value = currentValK;
+
+            // Update Kategori
+            const uniqueCat = [...new Set(activeMatches.map(m => m.cat))].filter(Boolean).sort();
+            const selectCat = document.getElementById('br-f-cat');
+            const currentValC = selectCat.value;
+            selectCat.innerHTML = '<option value="SEMUA">Semua Kategori</option>' + uniqueCat.map(k => `<option value="${k}">${k}</option>`).join('');
+            if(uniqueCat.includes(currentValC)) selectCat.value = currentValC;
+            
+            // Update Gender
+            const uniqueGender = [...new Set(activeMatches.map(m => m.gender))].filter(Boolean).sort();
+            const selectGender = document.getElementById('br-f-gender');
+            const currentValG = selectGender.value;
+            selectGender.innerHTML = '<option value="SEMUA">Semua Gender</option>' + uniqueGender.map(k => `<option value="${k}">${k}</option>`).join('');
+            if(uniqueGender.includes(currentValG)) selectGender.value = currentValG;
+        }
+
+        // =========================================================
+        // LOGIKA RECURSIVE TREE BRACKET & RECOVERY
+        // =========================================================
+        
+        function getPhaseName(depth) {
+            if (depth === 0) return "FINAL";
+            if (depth === 1) return "SEMI FINAL";
+            if (depth === 2) return "PEREMPAT FINAL";
+            return "PENYISIHAN";
+        }
+
+        window.generateNewBracket = function() {
+            const fCat = document.getElementById('br-f-cat').value;
+            const fKelas = document.getElementById('br-f-kelas').value;
+            const fGender = document.getElementById('br-f-gender').value;
+            
+            // Filter Data
+            const categoryMatches = (window.state.matches || []).filter(m => 
+                (fCat === 'SEMUA' || m.cat === fCat) && 
+                (fKelas === 'SEMUA' || m.kelas === fKelas) && 
+                (fGender === 'SEMUA' || m.gender === fGender) &&
+                (m.m || m.b)
+            );
+            
+            const container = document.getElementById('bracket-render');
+            container.innerHTML = '';
+            
+            if (categoryMatches.length === 0) { 
+                container.innerHTML = `
+                    <div class="flex flex-col items-center justify-center text-slate-400 mt-20" style="width: 100vw;">
+                        <i class="fas fa-sitemap text-6xl mb-4 text-slate-300"></i>
+                        <p class="font-black uppercase tracking-widest text-[10px]">Data tidak ditemukan.</p>
+                    </div>`; 
+                return; 
+            }
+
+            const matchMap = {};
+            categoryMatches.forEach(m => matchMap[m.p] = m);
+
+            // Mapping Hirarki (Child -> Parent) untuk mengatasi overwrite jika partai selesai
+            const links = {};
+            const childrenOf = {};
+            categoryMatches.forEach(m => { childrenOf[m.p] = { b: null, m: null }; });
+
+            const sanitize = str => (str || "").toUpperCase().trim();
+
+            // TAHAP 1: Ekstrak Relasi Eksplisit (Belum Selesai)
+            categoryMatches.forEach(m => {
+                const matchB = (m.b || "").match(/PEMENANG PARTAI (\d+)/i);
+                const matchM = (m.m || "").match(/PEMENANG PARTAI (\d+)/i);
+                
+                if (matchB && matchMap[matchB[1]]) {
+                    childrenOf[m.p].b = parseInt(matchB[1]);
+                    links[parseInt(matchB[1])] = m.p;
+                }
+                if (matchM && matchMap[matchM[1]]) {
+                    childrenOf[m.p].m = parseInt(matchM[1]);
+                    links[parseInt(matchM[1])] = m.p;
+                }
+            });
+
+            // TAHAP 2: Implicit Recovery (Pemulihan Relasi Untuk Partai Selesai)
+            // Jika nama diganti nama asli saat partai selesai, algoritma ini merekonstruksi relasinya
+            [...categoryMatches].sort((a, b) => parseInt(a.p) - parseInt(b.p)).forEach(m => {
+                if (!links[m.p] && m.status === 'selesai') {
+                    const winnerName = sanitize(m.winnerSide === 'biru' ? m.b : (m.winnerSide === 'merah' ? m.m : null));
+                    if (winnerName && winnerName !== '-' && winnerName !== 'BYE' && !winnerName.includes('PEMENANG')) {
+                        // Cari partai selanjutnya yang dimainkan oleh pemenang ini
+                        const nextMatch = categoryMatches.find(later => 
+                            parseInt(later.p) > parseInt(m.p) && 
+                            (sanitize(later.b) === winnerName || sanitize(later.m) === winnerName)
+                        );
+
+                        if (nextMatch) {
+                            const isB = sanitize(nextMatch.b) === winnerName;
+                            const isM = sanitize(nextMatch.m) === winnerName;
+                            
+                            if (isB && !childrenOf[nextMatch.p].b) {
+                                childrenOf[nextMatch.p].b = m.p;
+                                links[m.p] = nextMatch.p;
+                            } else if (isM && !childrenOf[nextMatch.p].m) {
+                                childrenOf[nextMatch.p].m = m.p;
+                                links[m.p] = nextMatch.p;
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Akar Pohon (Final Match - Tidak Punya Parent/Links)
+            const roots = categoryMatches.filter(m => !links[m.p]);
+            if (roots.length === 0) return;
+
+            // Ambil partai final dengan no partai tertinggi
+            const rootMatch = roots[roots.length - 1]; 
+            
+            // Bangun Pohon (Mulai dari Final dengan depth = 0)
+            const treeHTML = buildTreeHTML(rootMatch, matchMap, childrenOf, 0, true);
+            
+            // Header khusus untuk Export PDF
+            const headerInfo = `
+                <div class="export-header" id="pdf-header">
+                    <h1 style="font-size: 24px; font-weight: 900; color: #0f172a; margin:0; text-transform: uppercase;">SKEMA BAGAN PERTANDINGAN</h1>
+                    <p style="font-size: 14px; font-weight: 700; color: #64748b; margin: 5px 0 0 0; text-transform: uppercase;">
+                        KELAS: ${fKelas !== 'SEMUA' ? fKelas : 'GABUNGAN'} | 
+                        KATEGORI: ${fCat !== 'SEMUA' ? fCat : 'GABUNGAN'} | 
+                        GENDER: ${fGender !== 'SEMUA' ? fGender : 'GABUNGAN'}
+                    </p>
+                </div>
+            `;
+
+            // Tentukan Nama dan Warna Kotak Champion
+            let champName = `PEMENANG PARTAI ${rootMatch.p}`;
+            let champColor = `text-amber-600`;
+            if (rootMatch.status === 'selesai') {
+                if (rootMatch.winnerSide === 'biru') {
+                    champName = rootMatch.b;
+                    champColor = `text-blue-600`;
+                } else if (rootMatch.winnerSide === 'merah') {
+                    champName = rootMatch.m;
+                    champColor = `text-red-600`;
+                }
+            }
+
+            // Juara Box (Final Wrapper)
+            const finalNode = `
+                ${headerInfo}
+                <div class="tree-node is-root">
+                    <div class="tree-children">
+                        <div class="tree-child-wrapper">
+                            ${treeHTML}
+                        </div>
+                    </div>
+                    <div class="champ-box">
+                        <i class="fas fa-trophy text-4xl text-amber-500 mb-2"></i>
+                        <h3 class="font-black text-amber-700 uppercase tracking-widest text-sm">CHAMPION</h3>
+                        <p class="text-xs font-black ${champColor} mt-1 uppercase">${champName}</p>
+                    </div>
+                </div>
+            `;
+            
+            container.innerHTML = finalNode;
+        }
+
+        // Fungsi Rekursif (Pembangunan Cabang Bracket Berdasarkan Children Mapping)
+        function buildTreeHTML(match, matchMap, childrenOf, depth = 0, isRoot = false) {
+            // DETEKSI PESERTA GUGUR (Diberi class .slot-gray)
+            const isSelesai = match.status === 'selesai';
+            const bGugur = (isSelesai && match.winnerSide === 'merah') ? 'slot-gray' : '';
+            const rGugur = (isSelesai && match.winnerSide === 'biru') ? 'slot-gray' : '';
+
+            let childB_HTML = "";
+            let childM_HTML = "";
+
+            const childIdB = childrenOf[match.p].b;
+            const childIdM = childrenOf[match.p].m;
+
+            // Render cabang anak jika ada
+            if(childIdB && matchMap[childIdB]) {
+                childB_HTML = `<div class="tree-child-wrapper">${buildTreeHTML(matchMap[childIdB], matchMap, childrenOf, depth + 1)}</div>`;
+            }
+            if(childIdM && matchMap[childIdM]) {
+                childM_HTML = `<div class="tree-child-wrapper">${buildTreeHTML(matchMap[childIdM], matchMap, childrenOf, depth + 1)}</div>`;
+            }
+
+            const childrenWrapper = (childB_HTML || childM_HTML) ? `<div class="tree-children">${childB_HTML}${childM_HTML}</div>` : '';
+            
+            // Kunci: Jika tidak memiliki children, berikan class 'is-leaf' untuk menghilangkan garis kiri
+            const leafClass = (childB_HTML === "" && childM_HTML === "") ? "is-leaf" : "";
+            
+            const phaseName = getPhaseName(depth);
+            const detailInfo = `${match.kelas || '-'} | ${match.cat || '-'} | ${match.gender || '-'}`;
+
+            // Render Kartu Parent
+            const cardHTML = `
+                <div class="tree-parent ${leafClass}">
+                    <div class="matchup-card">
+                        <div class="match-tag">
+                            <span>PARTAI ${match.p}</span>
+                            <span style="font-size: 0.55rem; color: #94a3b8;">${phaseName}</span>
+                        </div>
+                        <div class="match-category-info">
+                            ${detailInfo}
+                        </div>
+                        <div class="player-slot slot-blue ${bGugur} border-b-2 border-white/20">
+                            <span>${match.b || '-'}</span>
+                            <small>${match.kb || '-'}</small>
+                        </div>
+                        <div class="player-slot slot-red ${rGugur}">
+                            <span>${match.m || '-'}</span>
+                            <small>${match.km || '-'}</small>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            return `
+                <div class="tree-node ${isRoot ? 'is-root' : ''}">
+                    ${childrenWrapper}
+                    ${cardHTML}
+                </div>
+            `;
+        }
+
+        // =========================================================
+        // EXPORT PDF ANTI TERPOTONG
+        // =========================================================
+        window.exportBracketPDF = function() {
+            const element = document.getElementById('bracket-render');
+            const header = document.getElementById('pdf-header');
+            
+            if(!element || element.innerHTML.trim() === '') {
+                alert("Tidak ada data bagan untuk di-export.");
+                return;
+            }
+
+            // Tampilkan header khusus untuk di PDF
+            if(header) header.style.display = 'block';
+
+            const fCat = document.getElementById('br-f-cat').value;
+            const fKelas = document.getElementById('br-f-kelas').value;
+            const fileName = `Bracket_${fKelas}_${fCat}.pdf`;
+            
+            // Trik agar html2canvas membaca seluruh width & height asli meskipun overflow
+            const opt = { 
+                margin: [10, 10, 10, 10], 
+                filename: fileName, 
+                image: { type: 'jpeg', quality: 1 }, 
+                html2canvas: { 
+                    scale: 2, 
+                    useCORS: true, 
+                    backgroundColor: '#f8fafc',
+                    scrollY: 0,
+                    scrollX: 0,
+                    windowWidth: element.scrollWidth + 50, // Tambah margin ekstra
+                    windowHeight: element.scrollHeight + 50
+                }, 
+                jsPDF: { unit: 'mm', format: 'a3', orientation: 'landscape' } 
+            };
+            
+            // Proses Export
+            html2pdf().set(opt).from(element).save().then(() => {
+                // Sembunyikan header kembali setelah selesai render
+                if(header) header.style.display = 'none';
+            });
+        }
+    </script>
+</body>
+</html>
